@@ -1,0 +1,163 @@
+{
+  "schema_version": 1,
+  "config_id": "PUBLIC_RETRAIN_FLIP_PILOT_V1",
+  "version": "m3r_public_retrain_flip_pilot_v1",
+  "status": "PROPOSED_NOT_AUTHORIZED",
+  "purpose": "public_retrain_flip_pilot",
+  "created_before_public_data_download_or_inspection": true,
+  "scope": {
+    "scientific_question": "Can the frozen single-model flip score predict held-out finite-model flip frequency better than same-information margin-only calibration on untouched observations?",
+    "data": "UCI Adult; public nonclinical feasibility screen only",
+    "clinical_or_ICU_claim": false,
+    "confirmation_data": false,
+    "registration": false,
+    "random_outer_inner_bootstrap": 0,
+    "research_execution_authorized": false,
+    "research_family_before": 21
+  },
+  "source": {
+    "dataset_name": "Adult / Census Income",
+    "official_page": "https://archive.ics.uci.edu/dataset/2/adult",
+    "official_archive": "https://archive.ics.uci.edu/static/public/2/adult.zip",
+    "citation": "Becker, B. & Kohavi, R. (1996). Adult [Dataset]. UCI Machine Learning Repository. https://doi.org/10.24432/C5XW20.",
+    "license": "Creative Commons Attribution 4.0 International (CC BY 4.0)",
+    "source_files": ["adult.data", "adult.test", "adult.names", "old.adult.names"],
+    "raw_data_directory": "data/public/uci_adult_m3r_v1"
+  },
+  "analysis_unit": {
+    "kind": "exact normalized 14-feature group",
+    "group_id": "sha256(canonical JSON array of typed, whitespace-trimmed features; categorical '?' mapped to __MISSING__)",
+    "within_group_record_weight": "each raw training record receives 1 / group_record_count, so each group contributes total weight 1",
+    "duplicate_test_groups": "exclude every adult.data group whose feature hash appears in adult.test; never inspect the adult.test income label",
+    "repeated_features": "all records sharing a feature-group hash are assigned to the same split; calibration and test score each group once",
+    "population_independence_claim": false
+  },
+  "partition": {
+    "official_test_is_final_evaluation": true,
+    "training_source": "adult.data only",
+    "training_calibration_hash_salt": "M3R-PUBLIC-ADULT-TRAIN-CAL-V1-20261109",
+    "training_rule": "SHA256(salt + newline + feature_group_sha256), interpret all 256 bits unsigned; train if 10 * digest_integer < 7 * 2^256, otherwise calibration",
+    "calibration_subset_salt": "M3R-PUBLIC-ADULT-CAL-SUBSET-V1-20261109",
+    "calibration_subset_rule": "sort eligible calibration groups by SHA256(salt + newline + feature_group_sha256), take first 512; if fewer, take all and report count; no refill",
+    "test_overlap_removal_uses_features_only": true,
+    "test_income_labels_used": false,
+    "partition_salts_changeable_after_data_inspection": false
+  },
+  "features": {
+    "column_order": ["age", "workclass", "fnlwgt", "education", "education-num", "marital-status", "occupation", "relationship", "race", "sex", "capital-gain", "capital-loss", "hours-per-week", "native-country"],
+    "target_column": "income",
+    "numeric_columns": ["age", "fnlwgt", "education-num", "capital-gain", "capital-loss", "hours-per-week"],
+    "categorical_columns": ["workclass", "education", "marital-status", "occupation", "relationship", "race", "sex", "native-country"],
+    "missing_category": "__MISSING__",
+    "unseen_category": "__UNK__",
+    "numeric_imputation": "training-group median only; report learned medians",
+    "categorical_vocabulary": "sorted unique categories learned from training groups only, with reserved missing/unknown tokens",
+    "numeric_scaling": "none; raw numeric features",
+    "categorical_encoding": "integer category codes with LightGBM native categorical feature indices",
+    "evaluation_label_available_to_pipeline": false
+  },
+  "base_models": {
+    "library": "lightgbm",
+    "expected_version": "4.6.0",
+    "objective": "binary",
+    "threshold": 0.5,
+    "boosting_rounds": 100,
+    "shared_parameters": {
+      "learning_rate": 0.05,
+      "num_leaves": 15,
+      "max_depth": 5,
+      "min_data_in_leaf": 40,
+      "lambda_l2": 1.0,
+      "feature_fraction": 1.0,
+      "bagging_fraction": 1.0,
+      "bagging_freq": 0,
+      "deterministic": true,
+      "force_col_wise": true,
+      "num_threads": 1,
+      "device_type": "cpu",
+      "verbosity": -1,
+      "feature_pre_filter": false
+    },
+    "models": [
+      {"model_id": "D0", "role": "CURRENT_SINGLE", "fit_count": 1, "fit_data": "all training feature groups", "seed": 20261109, "bootstrap_seed": null},
+      {"model_id_prefix": "INT", "model_ids": ["INT-01", "INT-02", "INT-03", "INT-04", "INT-05", "INT-06"], "role": "INTERNAL_CALIBRATION_REFERENCE", "fit_count": 6, "fit_data": "group bootstrap of training groups, n draws equals training group count, replacement", "bootstrap_seeds": [1001, 1002, 1003, 1004, 1005, 1006]},
+      {"model_id_prefix": "AUDIT", "model_ids": ["AUDIT-01", "AUDIT-02", "AUDIT-03", "AUDIT-04", "AUDIT-05", "AUDIT-06", "AUDIT-07", "AUDIT-08", "AUDIT-09", "AUDIT-10", "AUDIT-11"], "role": "HELD_OUT_AUDIT_REFERENCE", "fit_count": 11, "fit_data": "independent group bootstrap of training groups, n draws equals training group count, replacement", "bootstrap_seeds": [2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011]}
+    ],
+    "fit_calls": 18,
+    "seed_namespace_is_fixed": true,
+    "all_models_train_only": true
+  },
+  "score_and_targets": {
+    "logit_margin": "z = logit(p_D0), requiring finite predictions strictly inside (0,1)",
+    "alert_rule": "p >= 0.5, equivalently z >= 0",
+    "calibration_target": "mean over six INT predictions of indicator((p_INT >= 0.5) differs from (p_D0 >= 0.5))",
+    "evaluation_target": "mean over eleven AUDIT predictions of indicator((p_AUDIT >= 0.5) differs from (p_D0 >= 0.5))",
+    "method_fit_queue": "selected calibration groups with D0 alert and group weight 1",
+    "evaluation_queue": "adult.test feature groups with D0 alert and group weight 1; identical rows and weights for every method",
+    "audit_outputs_in_mapping_fit": false,
+    "audit_outputs_in_feature_or_scale_or_kde_fit": false,
+    "finite_11_reference_is_unknown_retrain_truth": false
+  },
+  "methods": {
+    "fixed_order": [
+      {"method_id": "isotonic_margin", "fit_calls": 1, "input": "z", "target": "six-INT flip rate", "direction": "nonincreasing", "library": "sklearn.isotonic.IsotonicRegression", "out_of_bounds": "clip"},
+      {"method_id": "logistic_nll_margin", "fit_calls": 1, "input": "z", "target": "six-INT flip rate", "link": "sigmoid", "loss": "weighted soft-label Bernoulli NLL + 1e-6 * slope^2", "initial": [0, 0], "bounds": [-20, 20], "optimizer": "L-BFGS-B", "maxiter": 300, "maxfun": 6000, "ftol": 1e-12, "gtol": 1e-8, "maxls": 20, "restarts": 0},
+      {"method_id": "logistic_brier_margin", "fit_calls": 1, "input": "z", "target": "six-INT flip rate", "link": "sigmoid", "loss": "weighted Brier + 1e-6 * slope^2; intercept unpenalized", "initial": [0, 0], "bounds": [-20, 20], "optimizer": "L-BFGS-B", "maxiter": 300, "maxfun": 6000, "ftol": 1e-12, "gtol": 1e-8, "maxls": 20, "restarts": 0, "brier_gradient": "2 sum_i w_i(q_i-t_i)q_i(1-q_i)[1,z_i] + [0,2e-6*beta_slope]"},
+      {"method_id": "frozen_tweedie_score", "fit_calls": 0, "kde_calls": 1, "scale_calls": 1, "input": "D0 margin z and calibration-only KDE/variance", "function": "inflight.certify.flip.tweedie_flip_probability", "preserve_probability_clipping": [0, 0.5]},
+      {"method_id": "isotonic_tweedie_score", "fit_calls": 1, "input": "saved frozen Tweedie score", "target": "six-INT flip rate", "direction": "nondecreasing", "purpose": "attribution diagnostic only; cannot rescue primary score failure"}
+    ],
+    "supervised_mapping_fit_calls": 4,
+    "same_calibration_alert_queue": true,
+    "nll_and_brier_have_same_inputs_and_regularization": true,
+    "isotonic_df_is_reported_from_saved_thresholds": true
+  },
+  "scale_and_kde": {
+    "scale_estimator": "mean over selected calibration groups of unbiased sample variance (ddof=1) across six INT logit margins; equal group weights",
+    "scale_fit_calls": 1,
+    "kde_reference": "selected calibration groups' D0 margins only",
+    "kde_fit_calls": 1,
+    "query_grid": "2001 equally spaced points from min(calibration z)-1 to max(calibration z)+1",
+    "frozen_function_invocations": 1,
+    "interpolation": "linear interpolation on saved grid; outside range use endpoint value; report calibration/evaluation extrapolation fractions",
+    "zero_scale_or_zero_bandwidth": "mark Tweedie method non-estimable, retain every other method, no floor or seed change"
+  },
+  "metrics": {
+    "primary": "group-weighted finite 11-AUDIT-reference Brier on one common D0-alert evaluation queue",
+    "secondary": ["paired Brier differences", "fixed 10-bin ECE", "exact-score-group squared calibration/refinement diagnostic", "alert support", "ranking", "risk-coverage", "fit/application cost"],
+    "ece_bins": 10,
+    "uncertainty_intervals": false,
+    "p_values": false,
+    "adult_income_test_labels_used_for_metrics": false,
+    "finite_11_audit_models_claimed_as_independent_retrain_population": false
+  },
+  "accounting": {
+    "historical_research_family_calls_before": 21,
+    "prediction_model_fits": 18,
+    "supervised_mapping_fits": 4,
+    "kde_estimates": 1,
+    "scale_estimates": 1,
+    "new_budget_total_units": 24,
+    "retry_budget": 0,
+    "resource_ceiling_status": "PROPOSED_NOT_MEASURED",
+    "logical_cpus": 1,
+    "native_threads": 1,
+    "gpu": false,
+    "wall_seconds_max": 300,
+    "cpu_seconds_max": 300,
+    "address_space_bytes_max": 2147483648,
+    "checkpoint_prefix": "runs/m3/m3r_public_retrain_flip_pilot_v1",
+    "output_prefix": "reports/m3/M3_R_PUBLIC_RETRAIN_FLIP_PILOT_V1"
+  },
+  "approval": {
+    "status": "NOT_AUTHORIZED",
+    "approval_record_path": "reports/m3/M3_R_PUBLIC_RETRAIN_FLIP_PILOT_V1_PROPOSAL/approval_record.json",
+    "inherited_s2c_authorization": false,
+    "must_bind_config_and_proposal_hashes": true
+  },
+  "predeclared_decision_rule": {
+    "margin_only_comparators": ["isotonic_margin", "logistic_nll_margin", "logistic_brier_margin"],
+    "primary_score_failure_action": "stop presenting frozen Tweedie score as superior if it does not beat the predeclared margin-only same-information baselines on the common held-out audit queue; post-hoc Tweedie isotonic success only supports ordinary calibration, not the raw score",
+    "if_any_advantage": "inspect budget, sorting, interpolation, loss and leakage; treat as a reason for a later independent multi-task replication, never as a general/ICU claim",
+    "no_v3_or_seed_search": true
+  }
+}

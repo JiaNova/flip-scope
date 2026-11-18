@@ -1,0 +1,30 @@
+# Public downloaded data and saved experiment runs
+/data/
+/runs/
+# Row-level data, saved predictions, and learned weights stay local
+*.npz
+*.npy
+/reports/**/models/
+/reports/**/prediction*
+/reports/**/*patient*manifest*.csv
+/reports/**/*encounter*manifest*.csv
+# Local environment and generated caches
+.env
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.py[cod]
+*.egg-info/
+/build/
+/dist/
+*.tmp
+*.partial
+*.log
+*.aux
+*.bbl
+*.blg
+*.out
+*.toc
+*.synctex.gz
+.DS_Store
